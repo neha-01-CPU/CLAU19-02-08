@@ -355,7 +355,6 @@ setAvatar(0);
 /* ════════════════════════════════════════════
    LOBBY — SETTINGS & PLAY
 ════════════════════════════════════════════ */
-
 btnPlay.addEventListener('click', () => {
   const name = inpName.value.trim();
   if (!name) {
@@ -370,7 +369,7 @@ btnPlay.addEventListener('click', () => {
   S.playerName  = name;
   S.totalRounds = 3;  
   S.drawTime    = 90; 
-  S.botCount    = 12; 
+  S.botCount    = 8; 
   S.hintsCount  = 2;
   transitionToGame();
 });
@@ -495,7 +494,6 @@ function initGame() {
   setupChat();
   setupMuteBtn();
   setupContextMenu();
-  setupVoteBanner();
   initCanvas();
 
   overlayWaiting.classList.add('hidden');
@@ -536,10 +534,6 @@ function buildPlayers() {
     });
   }
   S.drawerIdx = 0;
-
-  S.players.slice(1, 4).forEach((p, i) => {
-    setTimeout(() => showEventPopup('👤', `${p.name} joined the lobby!`), 400 + i * 500);
-  });
 }
 
 function buildLeaderboard() {
@@ -802,8 +796,7 @@ function endGame() {
 function scheduleBotGuesses() {
   const bots = S.players.filter(p => !p.isSelf && p.id !== S.players[S.drawerIdx]?.id);
   bots.forEach((bot, idx) => {
-    // Fast correct guess for rapid testing
-    const correctDelay = 2000 + idx * 1000 + Math.random() * 2000;
+    const correctDelay = 2000 + idx * 1500 + Math.random() * 2000;
     setTimeout(() => {
       if (!S.currentWord || bot.guessed) return;
       botGuessCorrect(bot);

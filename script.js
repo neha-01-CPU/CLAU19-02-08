@@ -1,6 +1,6 @@
 /* ================================================================
-   PICAZO — script.js  v3.0
-   Full Feature: Timer, Bots, Chat, Canvas, Avatars, Popups
+   PICAZO — script.js  v4.0 (Multiplayer Prep - Bots Removed)
+   Full Feature: Timer, Chat, Canvas, Avatars, Popups
 ================================================================ */
 'use strict';
 
@@ -230,7 +230,7 @@ let S = {
   playerName: '',
   totalRounds: 3,
   drawTime: 90,
-  botCount: 8,
+  maxPlayers: 8,
   hintsCount: 2,
   customWords: [],
 
@@ -369,7 +369,7 @@ btnPlay.addEventListener('click', () => {
   S.playerName  = name;
   S.totalRounds = 3;  
   S.drawTime    = 90; 
-  S.botCount    = 8; 
+  S.maxPlayers  = 8; 
   S.hintsCount  = 2;
   transitionToGame();
 });
@@ -404,7 +404,7 @@ btnStartPrivate.addEventListener('click', () => {
   S.playerName  = name;
   S.totalRounds = +$('priv-rounds').value;
   S.drawTime    = +$('priv-time').value;
-  S.botCount    = +$('priv-players').value;
+  S.maxPlayers  = +$('priv-players').value;
   S.hintsCount  = +$('priv-hints').value;
 
   const rawWords = $('priv-words').value.trim();
@@ -485,20 +485,23 @@ function setupMobileLayout() {
 window.addEventListener('resize', () => { setupMobileLayout(); resizeCanvas(); });
 
 /* ════════════════════════════════════════════
-   GAME INIT
+   GAME INIT (Multiplayer Ready)
 ════════════════════════════════════════════ */
 function initGame() {
+  // We only load the local player now. Bots are removed to prepare for WebSockets.
   buildPlayers();
   buildColorPalette();
   setupToolbar();
   setupChat();
   setupMuteBtn();
   setupContextMenu();
+  setupVoteBanner();
   initCanvas();
 
-  overlayWaiting.classList.add('hidden');
+  // In a real game, this overlay stays visible until another player joins
+  overlayWaiting.classList.remove('hidden');
 
-  addChat('system', '', '🎨 Welcome to Picazo! Game is starting…');
+  addChat('system', '', '🎨 Welcome to Picazo! Waiting for players...');
   addChat('system', '', `You are playing as ${S.playerName}.`);
 
   S.round = 1;
@@ -507,14 +510,13 @@ function initGame() {
   updateRoundBadge();
   buildLeaderboard();
 
-  showEventPopup('🎮', 'Game started! Get ready!');
-  setTimeout(startWordSelection, 800);
+  // For testing the UI sandbox without bots, we will auto-start the game after 2 seconds
+  setTimeout(() => {
+    overlayWaiting.classList.add('hidden');
+    showEventPopup('🎮', 'Game sandbox started!');
+    startWordSelection();
+  }, 2000);
 }
-
-/* ════════════════════════════════════════════
-   BOT PLAYERS
-════════════════════════════════════════════ */
-const BOT_NAMES = ['SketchBot','ArtGeek','DrawMaster','DoodleKing','PicassoJr','BrushWizard','InkMage','PixelPro','SplatKing','DoodleFox','QuickDraw','WildStrokes'];
 
 function buildPlayers() {
   S.players = [{
@@ -522,17 +524,6 @@ function buildPlayers() {
     avatarDef: AVATAR_DEFS[S.avatarIdx],
     score: 0, isSelf: true, guessed: false
   }];
-  const shuffledBots = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
-  const shuffledAvs  = AVATAR_DEFS.slice(1).sort(() => Math.random() - 0.5);
-  const count = Math.max(1, S.botCount - 1);
-  for (let i = 0; i < count; i++) {
-    S.players.push({
-      id: 'bot_' + i,
-      name: shuffledBots[i % shuffledBots.length] || 'Bot' + i,
-      avatarDef: shuffledAvs[i % shuffledAvs.length],
-      score: 0, isSelf: false, guessed: false
-    });
-  }
   S.drawerIdx = 0;
 }
 
@@ -623,14 +614,6 @@ function startWordSelection() {
     wsTimerBar.style.width = (t / 15 * 100) + '%';
     if (t <= 0) { clearInterval(S.wsTimerInterval); chooseWord(choices[0].w); }
   }, 1000);
-
-  if (!S.isDrawer) {
-    setTimeout(() => {
-      if (!overlayWordSelect.classList.contains('hidden')) {
-        chooseWord(choices[Math.floor(Math.random() * 3)].w);
-      }
-    }, 3500);
-  }
 }
 
 function chooseWord(word) {
@@ -641,7 +624,6 @@ function chooseWord(word) {
   renderWordBlanks();
   startRoundTimer();
   addChat('system', '', `${S.players[S.drawerIdx].name} is now drawing! 🖊️`);
-  scheduleBotGuesses();
 
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
@@ -790,35 +772,6 @@ function endGame() {
   ).join('');
 }
 
-/* ════════════════════════════════════════════
-   BOT GUESSING (Rapid for testing)
-════════════════════════════════════════════ */
-function scheduleBotGuesses() {
-  const bots = S.players.filter(p => !p.isSelf && p.id !== S.players[S.drawerIdx]?.id);
-  bots.forEach((bot, idx) => {
-    const correctDelay = 2000 + idx * 1500 + Math.random() * 2000;
-    setTimeout(() => {
-      if (!S.currentWord || bot.guessed) return;
-      botGuessCorrect(bot);
-    }, correctDelay);
-  });
-}
-
-function botGuessCorrect(bot) {
-  const pts = Math.max(10, Math.round(S.timeLeft / S.drawTime * 100));
-  bot.score += pts;
-  bot.guessed = true;
-  S.guessedIds.add(bot.id);
-  addChat('correct', bot.name, `🎉 Guessed the word! (+${pts} pts)`);
-  buildLeaderboard();
-  floatPoints(`+${pts}`, window.innerWidth * 0.5, window.innerHeight * 0.5);
-
-  const nonDrawers = S.players.filter(p => p.id !== S.players[S.drawerIdx]?.id);
-  if (nonDrawers.every(p => p.guessed)) {
-    clearInterval(S.timerInterval);
-    setTimeout(() => endRound(true), 1000);
-  }
-}
 
 /* ════════════════════════════════════════════
    CANVAS DRAWING & TOOLS (Fill perfectly restored)
@@ -955,7 +908,7 @@ function floodFill(startX, startY, fillHex) {
 }
 
 /* ════════════════════════════════════════════
-   TOOLBAR SETUP (No shape tools, fill enabled)
+   TOOLBAR SETUP
 ════════════════════════════════════════════ */
 function setupToolbar() {
   ['pencil','fill','eraser'].forEach(t => {
